@@ -7,10 +7,8 @@ import time
 # 模拟请求头
 def get_headers():
     return {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
-            AppleWebKit/537.36 (KHTML, like Gecko) Chrome/',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,\
-            image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Encoding': 'gzip, deflate',
         'Host': 'www.emumax.com',
         'Cache-Control': 'no-cache',
@@ -19,7 +17,6 @@ def get_headers():
         'Upgrade-Insecure-Requests': '1',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6'
     }
-
 
 def get_html_content_with_policy(page, delay=1):
     url = f'http://www.emumax.com/roms/0-0-0-0-{page}.html'
@@ -110,8 +107,7 @@ def insert_game(conn, game):
     conn.commit()
 
 # 获取迅雷链
-def get_thunder_url(t,pid,id):
-    
+def get_thunder_url(t, pid, id):
     url = f'http://www.emumax.com/download/xunlei?t={t}&pid={pid}&id={id}'
     # 发送POST请求
     r = requests.post(url, headers=get_headers())
@@ -129,10 +125,9 @@ def thunder_encode(a):
     e = d + base64.b64encode((b + a + c).encode('utf-8')).decode('utf-8')
     return e
 
-
-def store_games_in_database(games):
+def store_games_in_database(games, db_name):
     # 连接SQLite数据库（如果不存在则创建新的）
-    conn = sqlite3.connect('games_database.db')
+    conn = sqlite3.connect(db_name)
     
     # 如果表不存在，则创建games表
     create_game_table(conn)
@@ -144,10 +139,7 @@ def store_games_in_database(games):
     # 关闭数据库连接
     conn.close()
 
-def main():
-    total_pages = 2869
-    delay_between_requests = 1
-
+def main(total_pages, delay_between_requests, db_name):
     for page_number in range(1, total_pages + 1):
         html_content = get_html_content_with_policy(page_number, delay_between_requests)
 
@@ -156,10 +148,13 @@ def main():
             games = parse_game_list(html_content)
 
             # 将解析的游戏信息存储在SQLite数据库中
-            store_games_in_database(games)
+            store_games_in_database(games, db_name)
         else:
             # 处理获取HTML失败的情况
             print(f'无法获取第{page_number}页的HTML')
 
 if __name__ == '__main__':
-    main()
+    total_pages = 2869
+    delay_between_requests = 1
+    db_name = 'games_database.db'
+    main(total_pages, delay_between_requests, db_name)
