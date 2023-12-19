@@ -1,10 +1,13 @@
 import sqlite3
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, \
-    QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem, QFileDialog, QGridLayout, QLineEdit
+
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, \
+    QListWidget, QListWidgetItem, QFileDialog, QGridLayout, QLineEdit
 from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import Qt, QSortFilterProxyModel
+from PyQt5.QtCore import QThread, pyqtSignal, Qt
 from urllib.request import urlopen
 import sys
+from PyQt5.QtGui import QMovie
+
 
 class RomsBrowserApp(QMainWindow):
     def __init__(self):
@@ -53,6 +56,13 @@ class RomsBrowserApp(QMainWindow):
         # 初始化搜索框为不可编辑
         self.search_edit.setDisabled(True)
 
+        self.game_content_image_widget = QLabel()
+
+        self.selected_item = None
+
+
+
+
     def import_db(self):
         # 打开文件对话框以选择要导入的SQLite文件
         file_dialog = QFileDialog(self)
@@ -83,6 +93,7 @@ class RomsBrowserApp(QMainWindow):
             # 设置搜索框内容为空
             self.search_edit.clear()
 
+           
             # 启用搜索框
             self.search_edit.setDisabled(False)
 
@@ -90,10 +101,11 @@ class RomsBrowserApp(QMainWindow):
         if not self.db_filename:
             print("请先导入数据库。")
             return
-
+        self.game_content_image_widget.setMovie(QMovie("./assest/loading.gif"))
+        self.game_content_image_widget.movie().start()
         # 获取所选游戏的标题
         selected_title = item.text()
-
+        self.selected_item = selected_title
         # 连接到先前选择导入的SQLite数据库
         connection = sqlite3.connect(self.db_filename)
         cursor = connection.cursor()
@@ -110,11 +122,9 @@ class RomsBrowserApp(QMainWindow):
 
             if field[0] == "image_url":
                 # 如果是图片URL，则显示图片
-                # pixmap = self.load_image(value)
-                # image_label = QLabel()
-                # image_label.setPixmap(pixmap)
-                # self.details_widget.layout().addWidget(image_label, i, 1)
-                pass
+                self.details_widget.layout().addWidget(self.game_content_image_widget, i, 1)
+                self.load_image(self.prepend_domain(value),i,selected_title)
+                # pass
             elif field[0] == "url":
                 # 如果是URL字段，则创建链接
                 url_label = QLabel(f'<a href="{self.prepend_domain(value)}">{value}</a>')
@@ -128,17 +138,30 @@ class RomsBrowserApp(QMainWindow):
         # 关闭数据库连接
         cursor.close()
         connection.close()
+    
+
+    
     def prepend_domain(self, url):
         # 拼接域名并返回完整的URL
         return f"http://www.emumax.com{url}"
 
-    def load_image(self, url):
-        # 从URL加载图片并返回QPixmap
-        response = urlopen(url)
-        image_data = response.read()
-        image = QImage.fromData(image_data)
-        pixmap = QPixmap.fromImage(image)
-        return pixmap
+    def show_image(self, pixmap,i,name):
+         if(name != self.selected_item):
+             return
+         self.game_content_image_widget.movie().stop()
+         self.game_content_image_widget.setPixmap(pixmap)
+         
+         
+
+    def load_image(self, url,i,name):
+        # 创建加载图片的线程
+        self.image_loading_thread = ImageLoadingThread(url,i,name)
+
+        # 连接图片加载完成的信号到显示图片的槽函数
+        self.image_loading_thread.image_loaded.connect(self.show_image)
+
+        # 启动线程
+        self.image_loading_thread.start()
 
     def clear_layout(self, layout):
         # 清除布局中的所有子部件
@@ -176,6 +199,29 @@ class RomsBrowserApp(QMainWindow):
         # 关闭数据库连接
         cursor.close()
         connection.close()
+
+class ImageLoadingThread(QThread):
+    
+    # 定义一个信号，用于在图片加载完成后通知主线程
+    image_loaded = pyqtSignal(QPixmap,int,str)
+
+    def __init__(self, url,i,name):
+        super().__init__()
+        self.url = url
+        self.i = i
+        self.name = name
+
+    def run(self):
+        # 在这个线程中加载图片
+        data = urlopen(self.url).read()
+        pixmap = QPixmap()
+        pixmap.loadFromData(data)
+        if pixmap.isNull():
+            print("图片加载失败。")
+            return
+        
+        # 图片加载完成后，发出信号
+        self.image_loaded.emit(pixmap,self.i,self.name)
 
 def main():
     app = QApplication(sys.argv)
