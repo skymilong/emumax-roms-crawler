@@ -1,6 +1,6 @@
 import sqlite3
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, \
+from PyQt5.QtWidgets import QApplication,QPushButton,QMessageBox, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, \
     QListWidget, QListWidgetItem, QFileDialog, QGridLayout, QLineEdit
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import QThread, pyqtSignal, Qt
@@ -52,6 +52,31 @@ class RomsBrowserApp(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+
+
+           # 添加收藏列表和列表控件
+        self.current_game_details = None  # 用于保存当前显示的游戏的详细信息
+
+        self.favorites_list = []  # 用于存储收藏游戏的详细信息
+        self.favorites_list_widget = QListWidget()  # 显示收藏游戏名称的列表控件
+        self.favorites_list_widget.setSelectionMode(QListWidget.MultiSelection)  # 允许多选
+
+        # 创建添加到收藏的按钮
+        self.add_to_favorites_button = QPushButton("加入收藏列表")
+        self.add_to_favorites_button.clicked.connect(self.add_to_favorites)
+        self.add_to_favorites_button.setDisabled(True)  # 初始时禁用按钮，直到有游戏被选中
+
+        # 添加删除按钮
+        self.delete_from_favorites_button = QPushButton("删除")
+        self.delete_from_favorites_button.clicked.connect(self.delete_from_favorites)
+        self.delete_from_favorites_button.setDisabled(True)  # 初始时禁用按钮，直到有游戏被选中
+
+        # 将收藏列表控件和按钮添加到布局中
+        favorites_layout = QVBoxLayout()
+        favorites_layout.addWidget(self.favorites_list_widget)
+        favorites_layout.addWidget(self.add_to_favorites_button)
+        favorites_layout.addWidget(self.delete_from_favorites_button)
+        main_layout.addLayout(favorites_layout)  # 将收藏列表布局添加到主布局中
 
         # 初始化搜索框为不可编辑
         self.search_edit.setDisabled(True)
@@ -113,7 +138,7 @@ class RomsBrowserApp(QMainWindow):
         # 查询所选游戏的所有字段
         cursor.execute("SELECT * FROM games WHERE title=?", (selected_title,))
         game_data = cursor.fetchone()
-
+        self.current_game_details = game_data  # 保存当前游戏的详细信息
         # 显示详情部分
         self.clear_layout(self.details_widget.layout())
         for i, (field, value) in enumerate(zip(cursor.description, game_data)):
@@ -134,13 +159,31 @@ class RomsBrowserApp(QMainWindow):
                 # 否则显示文本值
                 value_label = QLabel(str(value))
                 self.details_widget.layout().addWidget(value_label, i, 1)
-
+         # 游戏详情显示后，启用添加到收藏的按钮
+        self.add_to_favorites_button.setDisabled(False)
+        
         # 关闭数据库连接
         cursor.close()
         connection.close()
     
+    def add_to_favorites(self):
+        # 添加当前查看的游戏到收藏列表
+        if self.selected_item and self.selected_item not in self.favorites_list:
+            self.favorites_list.append(self.selected_item)
+            self.favorites_list_widget.addItem(self.selected_item)
+            self.delete_from_favorites_button.setDisabled(False)  # 有收藏项时启用删除按钮
+        else:
+            QMessageBox.information(self, "提示", "该游戏已存在于收藏列表中。")
+    def delete_from_favorites(self):
+        # 从收藏列表中删除选中的游戏
+        selected_items = self.favorites_list_widget.selectedItems()
+        if selected_items:
+            for item in selected_items:
+                self.favorites_list_widget.takeItem(self.favorites_list_widget.row(item))
+                self.favorites_list.remove(item.text())
+            if not self.favorites_list:
+                self.delete_from_favorites_button.setDisabled(True)  # 无收藏项时禁用删除按钮   
 
-    
     def prepend_domain(self, url):
         # 拼接域名并返回完整的URL
         return f"http://www.emumax.com{url}"

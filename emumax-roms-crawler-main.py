@@ -47,16 +47,17 @@ def parse_game_list(html_content):
     for ul_element in game_ul_elements:
         game_info = {
             'title': ul_element.find('h1').find('a').text,
+            'title_en': ul_element.find('div', class_='divbt').find('span').text,
             'url': ul_element.find('h1').find('a')['href'],  # 获取URL
             'image_url': ul_element.find('img')['src'],
             'type': ul_element.find('dd', text=lambda t: t and t.startswith('游戏类型：')).text.split('：', 1)[1],
             'platform': ul_element.find('dd', text=lambda t: t and t.startswith('所属机种：')).text.split('：', 1)[1],
             'company': ul_element.find('dd', text=lambda t: t and t.startswith('出品公司：')).text.split('：', 1)[1],
             'recommendation': ul_element.find('dd', text=lambda t: t and t.startswith('游戏推荐：')).text.split('：', 1)[1],
-            'update_time': ul_element.find('span', class_='divbt02_time').text,
-            'comments': ul_element.find('span', class_='divbt02_liuyan')['title'],
-            'downloads': ul_element.find('span', class_='divbt02_xiazai')['title'],
-            'views': ul_element.find('span', class_='divbt02_guankan')['title']
+            'update_time': ul_element.find('span', class_='divbt02_time').text.split('：', 1)[1],
+            'comments': ul_element.find('span', class_='divbt02_liuyan').text,
+            'downloads': ul_element.find('span', class_='divbt02_xiazai').text,
+            'views': ul_element.find('span', class_='divbt02_guankan').text
         }
         # 将游戏信息添加到列表中
         game_list.append(game_info)
@@ -71,6 +72,7 @@ def create_game_table(conn):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             url TEXT,
             title TEXT,
+            title_en TEXT,
             image_url TEXT,
             type TEXT,
             platform TEXT,
@@ -87,23 +89,59 @@ def create_game_table(conn):
 def insert_game(conn, game):
     print(f'插入{game["title"]}')
     cursor = conn.cursor()
-    # 将游戏插入表中
-    cursor.execute('''
-        INSERT INTO games (title, url, image_url, type, platform, company, recommendation, update_time, comments, downloads, views)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        game['title'],
-        game['url'],
-        game['image_url'],
-        game['type'],
-        game['platform'],
-        game['company'],
-        game['recommendation'],
-        game['update_time'],
-        game['comments'],
-        game['downloads'],
-        game['views']
-    ))
+    # 检查是否存在相同的title
+    cursor.execute('SELECT id FROM games WHERE title = ?', (game['title'],))
+    existing_game = cursor.fetchone()
+
+    if existing_game:
+        # 如果存在相同的title，则更新游戏信息
+        cursor.execute('''
+            UPDATE games SET
+            title_en = ?,
+            url = ?,
+            image_url = ?,
+            type = ?,
+            platform = ?,
+            company = ?,
+            recommendation = ?,
+            update_time = ?,
+            comments = ?,
+            downloads = ?,
+            views = ?
+            WHERE id = ?
+        ''', (
+            game['title_en'],
+            game['url'],
+            game['image_url'],
+            game['type'],
+            game['platform'],
+            game['company'],
+            game['recommendation'],
+            game['update_time'],
+            game['comments'],
+            game['downloads'],
+            game['views'],
+            existing_game[0]
+        ))
+    else:
+        # 如果不存在相同的title，则插入新的游戏信息
+        cursor.execute('''
+            INSERT INTO games (title,title_en, url, image_url, type, platform, company, recommendation, update_time, comments, downloads, views)
+            VALUES (?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            game['title'],
+            game['title_en'],
+            game['url'],
+            game['image_url'],
+            game['type'],
+            game['platform'],
+            game['company'],
+            game['recommendation'],
+            game['update_time'],
+            game['comments'],
+            game['downloads'],
+            game['views']
+        ))
     conn.commit()
 
 # 获取迅雷链
@@ -140,7 +178,7 @@ def store_games_in_database(games, db_name):
     conn.close()
 
 def main(total_pages, delay_between_requests, db_name):
-    for page_number in range(1, total_pages + 1):
+    for page_number in range(1633, total_pages + 1):
         html_content = get_html_content_with_policy(page_number, delay_between_requests)
 
         if html_content is not None:
@@ -155,6 +193,6 @@ def main(total_pages, delay_between_requests, db_name):
 
 if __name__ == '__main__':
     total_pages = 2869
-    delay_between_requests = 1
+    delay_between_requests = 0.2
     db_name = 'games_database.db'
     main(total_pages, delay_between_requests, db_name)
